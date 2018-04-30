@@ -1,0 +1,20 @@
+{
+  "name": "model-testing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:dev": "ENV=TEST BUCKET=com.erickatz.model-testing-bucket DATABASE_URL=postgres://localhost/my_db nodemon ./node_modules/mocha/bin/mocha *.spec.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.229.1",
+    "chai": "^4.1.2",
+    "mocha": "^5.1.1",
+    "pg": "^7.4.1",
+    "sequelize": "^4.37.6",
+    "uuid": "^3.2.1"
+  }
+}
