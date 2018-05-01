@@ -1,10 +1,12 @@
 const Sequelize = require('sequelize');
 const conn = new Sequelize(process.env.DATABASE_URL, { logging: false });
 const AWS = require('aws-sdk');
+const Bluebird = require('bluebird');
 const env = process.env.ENV;
 if(env === 'TEST'){
   AWS.config.loadFromPath('./test.config.json');
 }
+const S3 = Bluebird.promisifyAll(new AWS.S3());
 
 const Image = conn.define('image', {
   uris: {
@@ -45,7 +47,7 @@ const Image = conn.define('image', {
         }, [])
       )
       .then( uploads => {
-        //only set if image uri has been set
+        //remove null values
         image.uris = uploads.reduce((memo, result)=> {
           if(result.uri){
             memo[result.key] = result.uri;
@@ -59,51 +61,37 @@ const Image = conn.define('image', {
 
 //resolves with object - key and url
 Image.prototype.saveToCloud = function(key){
-  return new Promise((resolve, reject)=> {
-    const S3 = new AWS.S3();
-    S3.createBucket({ Bucket: process.env.BUCKET}, (err, bucket)=>{
-      if(err){
-        return reject(err);
-      }
-      const data = this.uris[key];
-      const extensions = data.split(';')[0].split('/');
-      const extension = extensions[extensions.length - 1];
-      const Body = new Buffer(data.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-      S3.upload({
-        Bucket: process.env.BUCKET,
-        Key: key,
-        Body: Body,
-        ContentType: `image/${extension}`,
-        ACL: 'public-read',
-      }, (err, data)=>{
-        if(err){
-          return reject(err);
-        }
-        resolve({uri: data.Location, key });
+    return S3.createBucketAsync({ Bucket: process.env.BUCKET})
+      .then( bucket => {
+        const data = this.uris[key];
+        const extensions = data.split(';')[0].split('/');
+        const extension = extensions[extensions.length - 1];
+        const Body = new Buffer(data.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        return S3.uploadAsync({
+          Bucket: process.env.BUCKET,
+          Key: key,
+          Body: Body,
+          ContentType: `image/${extension}`,
+          ACL: 'public-read',
+        });
+      })
+      .then( result => {
+        return {uri: result.Location, key };
       });
-    });
-  });
-}
+};
 
 Image.prototype.removeFromCloud = function(key){
-  return new Promise((resolve, reject)=> {
-    const S3 = new AWS.S3();
-    S3.createBucket({ Bucket: process.env.BUCKET}, (err, bucket)=>{
-      if(err){
-        return reject(err);
-      }
-      S3.deleteObject({
+  return S3.createBucketAsync({ Bucket: process.env.BUCKET})
+    .then( () => {
+      return S3.deleteObjectAsync({
         Bucket: process.env.BUCKET,
         Key: key,
-      }, (err, data)=>{
-        if(err){
-          return reject(err);
-        }
-        resolve({uri: null, key });
       });
+    })
+    .then(()=> {
+      return {uri: null, key };
     });
-  });
-}
+};
 
 const sync = ()=> conn.sync({ force: true });
 
